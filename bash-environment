@@ -1,0 +1,122 @@
+# Write history after each command
+_bash_history_append() {
+    builtin history -a
+}
+
+_load_completion_file() {
+declare -ra Array=( $HOME/Software/bash-*/share/bash-completion/bash_completion )
+declare -r Complete="${Array[-1]}"
+if ! shopt -oq posix; then
+  if [ -f "${Complete}" ]; then
+    . "${Complete}"
+  fi
+fi
+}
+
+_load_completion_file;
+
+function report {
+#  echo -e "$@" >&2;
+ return 0 ;
+}
+
+function show_var {
+  local Each ;
+  for Each ; do report "${Each}=\n  ${!Each//:/\n  }" ; done ;
+}
+
+function semantic_version {
+  declare -r File="${1##*/}" ;
+  declare -r Tail="${File#*-}" ;
+  echo ${Tail//./ } ;
+} 
+
+function later_version {
+  local This="${1}" ;
+  local Last="${2}" ;
+
+  if [ -z "${2}" ] ; then echo "${1}" ;
+  elif [ "${This%-*}" != "${Last%-*}" ] ; then echo "${1}:${2}" ;
+  else local -a ThisVers=( $( semantic_version "${This##*/}" ) ) ;
+       local -a LastVers=( $( semantic_version "${Last##*/}" ) ) ;
+       local -i Index=0 ;
+       local -i P=0 ;
+       local -i N=0 ;
+       local -i Max=${#LastVers[*]} ;
+
+       while [ "${Index}" -lt "${Max}" ] ;
+       do P=${ThisVers[$Index]} ;
+          N=${LastVers[$Index]} ;
+          [ "${N}" -ne "${P}" ] && break ;
+          let Index=Index+1 ;
+       done ;
+       if [ "${P}" -ge "${N}" ] ;
+       then echo "${1}" ;
+       else echo "${2}" ;
+       fi ;
+  fi ;
+}
+
+declare Each ;
+declare Path ;
+declare Dir ;
+declare Lib ;
+declare Incl ;
+declare Man ;
+for Each in ${HOME}/Software/*/bin/ ;
+do [ -d "${Each}" ] || continue ;
+   Path=$( later_version "${Each%/bin/}" "${Path%%:*}" )":${Path#*:}" ;
+done ;
+for Each in ${HOME}/Software/*/lib/ ;
+do [ -d "${Each}" ] || continue ;
+   [ -d "${Each%/lib/}/bin/" ] && continue ;
+   Path=$( later_version "${Each%/lib/}" "${Path%%:*}" )":${Path#*:}" ;
+done ;
+
+for Each in ${Path//:/ } ;
+do Bin="${Each}/bin"
+   [ -d "${Bin}" ] && PATH="${Bin}:${PATH}" ;
+   Lib="${Each}/lib" ;
+   if [ -d "${Lib}" ] ;
+   then LDFLAGS="-L${Lib} ${LDFLAGS}" ;  
+        LIBRARY_PATH="${Lib}:${LIBRARY_PATH%:}" ; fi ;
+   Incl="${Each}/include" ;
+   [ -d "${Incl}" ] && CPATH="${Incl}:${CPATH%:}" ;
+   for Man in ${Each}/{man,share/man} ;
+   do [ -d "${Man}" ] && MANPATH="${Man}:${MANPATH%:}" ; done ;
+done ;
+
+export PATH LDFLAGS LIBRARY_PATH CPATH MANPATH;
+
+export EDITOR=nano ;
+export VISUAL=nano ;
+
+export HISTSIZE=1000 ;
+export HISTCONTROL="ignoredups" ;
+
+export PROMPT_DIRTRIM=4 ;
+export PROMPT_COMMAND=$'ERRCODE=$?;
+if [ $ERRCODE -ne 0 ];
+then ERRFLAG="\E[31;01merror = $ERRCODE\E[39;49;00m \n";
+else unset ERRFLAG ;fi;
+_bash_history_append; '
+export PS1=$'${ERRFLAG}\[\e]2;\u@\h \w\a\]\[\e[31m\]\
+`date +%Y-%m-%dT%H:%M:%S%:::z` \[\e[32m\]\u@\h\[\e[00m\]:\
+\[\e[01;34m\]\w\[\e[00m\]\n\!> '
+
+alias ls='ls --color=always -G';
+
+Git_Compl="${HOME}/Scripts/git-completion.bash" ;
+
+if [ -f "${Git_Compl}" ] ; then . "${Git_Compl}" ; fi ;
+
+_direnv_hook() {
+  local previous_exit_status=$?;
+  trap -- '' SIGINT;
+  eval "$("/Users/phm/Software/direnv-2.32.1/bin/direnv" export bash)";
+  trap - SIGINT;
+  return $previous_exit_status;
+};
+if ! [[ "${PROMPT_COMMAND:-}" =~ _direnv_hook ]]; then
+  PROMPT_COMMAND="_direnv_hook${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+fi
