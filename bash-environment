@@ -1,3 +1,11 @@
+# Switch into and out of ''cursor addressing mode'' when running Joe-Editor
+# See https://linuxcommand.org/lc3_adv_tput.php for tput command
+function joe {
+  tput smcup \
+  && $HOME/Software/joe-4.6/bin/joe "$@" \
+  && tput rmcup ;
+}
+
 # Write history after each command
 _bash_history_append() {
     builtin history -a
